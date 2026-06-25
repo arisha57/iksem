@@ -602,17 +602,12 @@
                     <label>Размер</label>
                     <select id="modal-size"><option value="">Выберите</option></select>
                 </div>
-                <div class="modal-option-group">
-                    <label>Цвет</label>
-                    <select id="modal-color"><option value="">Выберите</option></select>
-                </div>
             </div>
             <div class="size-chart">
                 <h4>Таблица размеров</h4>
                 <table>
                     <thead><tr><th>Размер</th><th>Грудь</th><th>Талия</th></tr></thead>
                     <tbody>
-                        <tr><td>XS</td><td>42</td><td>32</td></tr>
                         <tr><td>S</td><td>44</td><td>34</td></tr>
                         <tr><td>M</td><td>46</td><td>36</td></tr>
                         <tr><td>L</td><td>48</td><td>38</td></tr>
@@ -749,73 +744,69 @@ function closeToast() {
 
         // ===== МОДАЛЬНОЕ ОКНО =====
         function openSizeModal() {
-            const modal = document.getElementById('size-modal');
-            const sizeSelect = document.getElementById('modal-size');
-            const colorSelect = document.getElementById('modal-color');
-            document.getElementById('modal-product-name').textContent = currentProduct ? currentProduct.name : '';
+    const modal = document.getElementById('size-modal');
+    const sizeSelect = document.getElementById('modal-size');
+    const nameElem = document.getElementById('modal-product-name');
 
-            sizeSelect.innerHTML = '<option value="">Выберите</option>';
-            colorSelect.innerHTML = '<option value="">Выберите</option>';
+    nameElem.textContent = currentProduct ? currentProduct.name : '';
 
-            if (currentProduct && currentProduct.size) {
-                currentProduct.size.split(',').map(s => s.trim()).forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s;
-                    opt.textContent = s;
-                    sizeSelect.appendChild(opt);
-                });
-            }
-            if (currentProduct && currentProduct.color) {
-                currentProduct.color.split(',').map(c => c.trim()).forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    colorSelect.appendChild(opt);
-                });
-            }
-            modal.classList.add('open');
-        }
+    sizeSelect.innerHTML = '<option value="">Выберите</option>';
+
+    if (currentProduct && currentProduct.size) {
+        currentProduct.size.split(',').map(s => s.trim()).forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            sizeSelect.appendChild(opt);
+        });
+    }
+    modal.classList.add('open');
+}
 
         function closeSizeModal() {
             document.getElementById('size-modal').classList.remove('open');
         }
 
         async function addToCartFromModal() {
-            const size = document.getElementById('modal-size').value;
-            const color = document.getElementById('modal-color').value;
+    const size = document.getElementById('modal-size').value;
 
-            if (!size || !color) {
-                alert('Выберите размер и цвет');
-                return;
-            }
+    if (!size) {
+        alert('Пожалуйста, выберите размер');
+        return;
+    }
 
-            const userCheck = await fetch('/api/me');
-            const userData = await userCheck.json();
-            if (!userData.user) {
-                if (confirm('Нужно войти. Перейти на страницу входа?')) {
-                    window.location.href = '/login.html';
-                }
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/cart/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ product_id: currentProduct.id, quantity: 1, size, color })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    closeSizeModal();
-                    updateCartCount();
-                    alert(`Добавлено!\nРазмер: ${size}\nЦвет: ${color}`);
-                } else {
-                    alert('Ошибка: ' + data.error);
-                }
-            } catch (e) {
-                alert('Ошибка при добавлении');
-            }
+    const userCheck = await fetch('/api/me');
+    const userData = await userCheck.json();
+    if (!userData.user) {
+        if (confirm('Нужно войти. Перейти на страницу входа?')) {
+            window.location.href = '/login.html';
         }
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/cart/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                product_id: currentProduct.id || selectedProductId, 
+                quantity: 1, 
+                size, 
+                color: '' 
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeSizeModal();
+            updateCartCount();
+            showToast('Добавлено!', `Размер: ${size}`, 'success');
+        } else {
+            showToast('Ошибка', data.error || 'Не удалось добавить', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка', 'Попробуйте позже', 'error');
+    }
+}
 
         // ===== КОРЗИНА =====
         async function updateCartCount() {
