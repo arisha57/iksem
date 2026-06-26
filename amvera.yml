@@ -1,14 +1,19 @@
 meta:
-  environment: docker
+  version: 1.0
   toolchain:
     name: docker
     version: latest
+
+app:
+  name: iksem
+  region: Moscow-0
+
 build:
-  dockerfile: Dockerfile
-  skip: true
+  docker:
+    dockerfile: Dockerfile
+
 run:
-  persistenceMount: /data
   image: iksem
   command: node server.js
-  args: null
+  persistenceMount: /data
   containerPort: 3000
