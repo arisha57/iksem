@@ -1,5 +1,5 @@
 # Используем официальный Node.js образ
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Устанавливаем SQLite (нужен для работы базы данных)
 RUN apk add --no-cache sqlite
