@@ -8,7 +8,7 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(__dirname, 'shop.db');
+const dbPath = path.join(__dirname, 'data', 'shop.db');
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
