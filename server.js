@@ -11,13 +11,13 @@ const db = require('./database.js');
 
 const JWT_SECRET = 'shh-secret-key-2024';
 
-// Папка для фото
+// ===== ПАПКА ДЛЯ ФОТО (ПОСТОЯННОЕ ХРАНИЛИЩЕ) =====
 const uploadDir = path.join(__dirname, 'data', 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Настройка multer
+// ===== НАСТРОЙКА MULTER =====
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadDir);
@@ -173,23 +173,62 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
     );
 });
 
+// ===== УДАЛЕНИЕ ТОВАРА (ИСПРАВЛЕНО) =====
 app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
-    db.get("SELECT image_url FROM product_images WHERE product_id = ?", [req.params.id], (err, images) => {
-        if (images) {
+    const id = req.params.id;
+    
+    db.all("SELECT image_url FROM product_images WHERE product_id = ?", [id], (err, images) => {
+        if (err) {
+            console.error('Ошибка получения фото:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        
+        // Удаляем файлы фото из data/uploads/
+        if (images && images.length > 0) {
             images.forEach(img => {
-                const filePath = path.join(__dirname, 'public', img.image_url);
-                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                if (img.image_url) {
+                    const filePath = path.join(__dirname, 'data', img.image_url);
+                    try {
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                            console.log(`Файл удалён: ${filePath}`);
+                        }
+                    } catch (e) {
+                        console.error('Ошибка удаления файла:', e);
+                    }
+                }
             });
         }
-        db.run("DELETE FROM product_images WHERE product_id = ?", [req.params.id]);
-        db.run("DELETE FROM cart WHERE product_id = ?", [req.params.id]);
-        db.run("DELETE FROM products WHERE id = ?", [req.params.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true, message: 'Товар удалён' });
+        
+        // Удаляем записи из БД
+        db.run("DELETE FROM product_images WHERE product_id = ?", [id], (err) => {
+            if (err) {
+                console.error('Ошибка удаления фото из БД:', err);
+                return res.status(500).json({ error: err.message });
+            }
+            
+            db.run("DELETE FROM cart WHERE product_id = ?", [id], (err) => {
+                if (err) {
+                    console.error('Ошибка удаления из корзин:', err);
+                    return res.status(500).json({ error: err.message });
+                }
+                
+                db.run("DELETE FROM products WHERE id = ?", [id], function(err) {
+                    if (err) {
+                        console.error('Ошибка удаления товара:', err);
+                        return res.status(500).json({ error: err.message });
+                    }
+                    if (this.changes === 0) {
+                        return res.status(404).json({ error: 'Товар не найден' });
+                    }
+                    res.json({ success: true, message: 'Товар удалён' });
+                });
+            });
         });
     });
 });
 
+// ===== ДОБАВЛЕНИЕ ФОТО К ТОВАРУ =====
 app.post('/api/admin/products/:id/images', requireAdmin, upload.single('image'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Фото не загружено' });
     db.run("INSERT INTO product_images (product_id, image_url) VALUES (?, ?)",
@@ -201,10 +240,11 @@ app.post('/api/admin/products/:id/images', requireAdmin, upload.single('image'),
     );
 });
 
+// ===== УДАЛЕНИЕ ОТДЕЛЬНОГО ФОТО (ИСПРАВЛЕНО) =====
 app.delete('/api/admin/products/images/:image_id', requireAdmin, (req, res) => {
     db.get("SELECT image_url FROM product_images WHERE id = ?", [req.params.image_id], (err, image) => {
         if (!image) return res.status(404).json({ error: 'Фото не найдено' });
-        const filePath = path.join(__dirname, 'public', image.image_url);
+        const filePath = path.join(__dirname, 'data', image.image_url);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         db.run("DELETE FROM product_images WHERE id = ?", [req.params.image_id], function(err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -359,9 +399,7 @@ app.get('/api/orders/:id', (req, res) => {
     }
     
     const orderId = req.params.id;
-    console.log(`Запрос деталей заказа ID: ${orderId} для пользователя ${user.id}`);
     
-    // Сначала проверяем, существует ли заказ
     db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, order) => {
         if (err) {
             console.error('Ошибка БД:', err);
@@ -369,24 +407,18 @@ app.get('/api/orders/:id', (req, res) => {
         }
         
         if (!order) {
-            console.log(`Заказ ${orderId} не найден`);
             return res.status(404).json({ error: 'Заказ не найден' });
         }
         
-        // Проверяем, принадлежит ли заказ этому пользователю
         if (order.user_id !== user.id) {
-            console.log(`Заказ ${orderId} принадлежит другому пользователю`);
             return res.status(403).json({ error: 'Доступ запрещён' });
         }
         
-        // Загружаем товары заказа
         db.all("SELECT * FROM order_items WHERE order_id = ?", [orderId], (err, items) => {
             if (err) {
                 console.error('Ошибка загрузки товаров:', err);
                 return res.status(500).json({ error: err.message });
             }
-            
-            console.log(`Найдено ${items.length} товаров в заказе ${orderId}`);
             res.json({ ...order, items });
         });
     });
@@ -417,7 +449,6 @@ app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
     });
 });
 
-// Для админа: получить товары заказа
 app.get('/api/admin/orders/:id/items', requireAdmin, (req, res) => {
     const orderId = req.params.id;
     db.all("SELECT * FROM order_items WHERE order_id = ?", [orderId], (err, items) => {
