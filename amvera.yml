@@ -1,0 +1,14 @@
+meta:
+  environment: docker
+  toolchain:
+    name: docker
+    version: latest
+build:
+  dockerfile: Dockerfile
+  skip: true
+run:
+  image: iksem
+  command: node server.js
+  args: null
+  persistenceMount: /data
+  containerPort: "3000"
